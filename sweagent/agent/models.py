@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+
+import asyncio
 import copy
 import json
+from lib.rotator_library.client import RotatingClient
 import os
 import random
+from dotenv import load_dotenv
 import shlex
 import threading
 import time
@@ -624,6 +631,24 @@ class LiteLLMModel(AbstractModel):
         if self.config.custom_tokenizer is not None:
             self.custom_tokenizer = litellm.utils.create_pretrained_tokenizer(**self.config.custom_tokenizer)
 
+        load_dotenv()
+        
+        api_keys = {}
+        for key, value in os.environ.items():
+            if (key.endswith("_API_KEY") or "_API_KEY_" in key) and key != "PROXY_API_KEY":
+                parts = key.split("_API_KEY")
+                provider = parts[0].lower()
+                if provider not in api_keys:
+                    api_keys[provider] = []
+                api_keys[provider].append(value)
+
+        self.rotator_client = None
+        if api_keys:
+            try:
+                self.rotator_client = RotatingClient(api_keys=api_keys, configure_logging=True)
+            except Exception as e:
+                self.logger.error(f"Failed to initialize RotatingClient: {e}")
+
     @property
     def instance_cost_limit(self) -> float:
         """Cost limit for the model. Returns 0 if there is no limit."""
@@ -676,6 +701,10 @@ class LiteLLMModel(AbstractModel):
         with GLOBAL_STATS_LOCK:
             GLOBAL_STATS.last_query_timestamp = time.time()
 
+    def _call_rotator_sync(self, **kwargs) -> litellm.types.utils.ModelResponse:
+        """Synchronous adapter for the async `acompletion` method of `RotatingClient`."""
+        return asyncio.run(self.rotator_client.acompletion(**kwargs))
+
     def _single_query(
         self, messages: list[dict[str, str]], n: int | None = None, temperature: float | None = None
     ) -> list[dict]:
@@ -700,7 +729,7 @@ class LiteLLMModel(AbstractModel):
             msg = f"Input tokens {input_tokens} exceed max tokens {self.model_max_input_tokens}"
             raise ContextWindowExceededError(msg)
         extra_args = {}
-        if self.config.api_base:
+        if self.config.api_base and not self.rotator_client:
             # Not assigned a default value in litellm, so only pass this if it's set
             extra_args["api_base"] = self.config.api_base
         if self.tools.use_function_calling:
@@ -710,18 +739,31 @@ class LiteLLMModel(AbstractModel):
         if self.lm_provider == "anthropic":
             completion_kwargs["max_tokens"] = self.model_max_output_tokens
         try:
-            response: litellm.types.utils.ModelResponse = litellm.completion(  # type: ignore
-                model=self.config.name,
-                messages=messages,
-                temperature=self.config.temperature if temperature is None else temperature,
-                top_p=self.config.top_p,
-                api_version=self.config.api_version,
-                api_key=self.config.choose_api_key(),
-                fallbacks=self.config.fallbacks,
-                **completion_kwargs,
-                **extra_args,
-                n=n,
-            )
+            if self.rotator_client:
+                response = self._call_rotator_sync(
+                    model=self.config.name,
+                    messages=messages,
+                    temperature=self.config.temperature if temperature is None else temperature,
+                    top_p=self.config.top_p,
+                    api_version=self.config.api_version,
+                    fallbacks=self.config.fallbacks,
+                    **completion_kwargs,
+                    **extra_args,
+                    n=n,
+                )
+            else:
+                response: litellm.types.utils.ModelResponse = litellm.completion(  # type: ignore
+                    model=self.config.name,
+                    messages=messages,
+                    temperature=self.config.temperature if temperature is None else temperature,
+                    top_p=self.config.top_p,
+                    api_version=self.config.api_version,
+                    api_key=self.config.choose_api_key(),
+                    fallbacks=self.config.fallbacks,
+                    **completion_kwargs,
+                    **extra_args,
+                    n=n,
+                )
         except litellm.exceptions.ContextWindowExceededError as e:
             raise ContextWindowExceededError from e
         except litellm.exceptions.ContentPolicyViolationError as e:

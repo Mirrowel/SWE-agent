@@ -3,13 +3,16 @@
 # and the image_tools bundle for viewing images as base64-encoded markdown.
 agent:
   model:
-    name: openai/gemini/gemini-2.5-pro # or any other model you want to use
+    name: gemini/gemini-2.5-pro # or any other model you want to use
     api_base: http://127.0.0.1:8000/v1
     api_key: VerysecretKey
     per_instance_cost_limit: 0   
     total_cost_limit: 0
     per_instance_call_limit: 100
     max_input_tokens: 250000
+    completion_kwargs:
+      reasoning_effort: high
+      custom_reasoning_budget: true
   templates:
     disable_image_processing: false
     system_template: |-
