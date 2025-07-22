@@ -15,34 +15,30 @@ agent:
     system_template: |-
       You are a helpful assistant that can interact with a computer to solve tasks.
     instance_template: |-
-      <uploaded_files>
-      {{working_dir}}
-      </uploaded_files>
-      I've uploaded a python code repository in the directory {{working_dir}}. Consider the following PR description:
+      I have cloned the repository `{{repo}}` into the `{{working_dir}}` directory.
 
-      <pr_description>
+      Here are the tools you can use:
+      <tools>
+      {{command_docs}}
+      </tools>
+
+      A user has submitted the following issue:
+      <issue_description>
       {{problem_statement}}
-      </pr_description>
+      </issue_description>
 
-      Can you help me implement the necessary changes to the repository so that the requirements specified in the <pr_description> are met?
-      I've already taken care of all changes to any of the test files described in the <pr_description>. This means you DON'T have to modify the testing logic or any of the tests in any way!
-      Your task is to make the minimal changes to non-tests files in the {{working_dir}} directory to ensure the <pr_description> is satisfied.
-      Follow these steps to resolve the issue:
-      1. As a first step, it might be a good idea to find and read code relevant to the <pr_description>
-      2. Create a script to reproduce the error and execute it with `python <filename.py>` using the bash tool, to confirm the error
-      3. Edit the sourcecode of the repo to resolve the issue
-      4. Rerun your reproduce script and confirm that the error is fixed!
-      5. Think about edgecases and make sure your fix handles them as well
-      Your thinking should be thorough and so it's fine if it's very long.
+      Your task is to act as an expert software engineering analyst. You must:
+      1.  Thoroughly analyze the repository to understand the code and the context of the issue. Use the available tools to inspect the relevant files.
+      2.  Identify the root cause of the problem described in the issue.
+      3.  Formulate a concrete code fix that resolves the issue.
+      4.  Once you are confident in your analysis and solution, you must use the `comment` tool to provide a comprehensive response.
 
-      Note: You can use the view_image command to display images as embedded base64 data when relevant.
-      You'll also be given access browser tools to interact with the web or a local server.
-      In the browser, your mouse is shown as a red crosshair.
+      Your final response in the `comment` tool should include:
+      - A clear explanation of the problem's root cause.
+      - The complete, corrected code block or a diff that shows your proposed changes.
 
-      If you need to start a command that has long-running output (e.g. a web server), you should _always_ use the following pattern:
-      server_command &> my_server_log.txt &
+      Remember: You are in read-only mode. You cannot modify the repository files directly. Your final action must be the `comment` tool.
 
-      This way you can see the server's output in the my_server_log.txt file and it will not block the rest of your work.
     next_step_template: |-
       OBSERVATION:
       {{observation}}

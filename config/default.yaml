@@ -2,6 +2,13 @@
 # This template is heavily inspired by anthropic's computer use demo, but you can use
 # it with any LM.
 agent:
+  model:
+    name: gemini/gemini-2.5-pro # or any other model you want to use
+    api_base: http://127.0.0.1:8000/v1
+    per_instance_cost_limit: 0   
+    total_cost_limit: 0
+    per_instance_call_limit: 100
+    max_input_tokens: 250000
   templates:
     system_template: |-
       You are a helpful assistant that can interact with a computer to solve tasks.
